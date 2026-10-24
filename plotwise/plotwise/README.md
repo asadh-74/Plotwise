@@ -57,7 +57,8 @@ Node 18+, Express, MySQL 8 (Aiven), JWT auth with roles (admin, agent, landlord,
 ## Quick start (local)
 
 ```bash
-git clone <your repo> && cd plotwise
+git clone https://github.com/asadh-74/Plotwise.git
+cd Plotwise/plotwise/plotwise
 npm install
 cp .env.example .env          # fill in DATABASE_URL, secrets
 npm run dev                   # creates the schema and demo data on first boot
