@@ -1,0 +1,202 @@
+{
+  "name": "Plotwise 09 - Lease expiry alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "3bec5a11-1c33-42fe-b6e2-020a33a187d9",
+      "name": "Daily 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c380721b-c89f-4427-9ee7-8e9e5f675b00",
+              "name": "api_base",
+              "value": "https://YOUR-APP.onrender.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5df9d7e5-3a76-46b6-bda7-c6ab570c84d4",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.api_base + '/api/automation/expiring-leases' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "ccdeb3f8-63e8-466a-b4bc-0672a0b48193",
+      "name": "Expiring leases",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().flatMap((i) => {\n      const l = i.json; const subject = `Lease for ${l.property_title} ends in ${l.days_left} days`;\n      const tail = `The lease ends on ${l.end_date}. Monthly rent is PKR ${Number(l.monthly_rent).toLocaleString('en-PK')}. Reply to this email to renew, change terms or plan the move-out.<br><br>Plotwise property management`;\n      return [\n        { json: { to: l.tenant_email, subject, html: `Hi ${l.tenant_name},<br><br>${tail}` } },\n        { json: { to: l.landlord_email, subject, html: `Hi ${l.landlord_name},<br><br>Your tenant ${l.tenant_name} is nearing the end of the lease. ${tail}` } },\n      ];\n    });"
+      },
+      "id": "f961c5bb-fc77-44f5-a73f-3d719596697c",
+      "name": "Build emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "50763d32-296a-4b86-a7c5-ae2096030af4",
+      "name": "Send alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.api_base + '/api/automation/runs/log' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'lease_expiry', payload: { emails: $('Build emails').all().length } }) }}",
+        "options": {}
+      },
+      "id": "87711614-d235-4c92-ab07-be44e710bdf3",
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      },
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Daily 09:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Expiring leases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expiring leases": {
+      "main": [
+        [
+          {
+            "node": "Build emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build emails": {
+      "main": [
+        [
+          {
+            "node": "Send alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send alert": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -1,0 +1,187 @@
+{
+  "name": "Plotwise 05 - Post-viewing follow-up",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "viewing-completed",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "d6873c33-a1c1-4734-9c47-f6239339dfc4",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "390e055e-7039-4add-beeb-35f866895815",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body; const l = b.lead || {}; const p = b.property || {}; const a = b.agent || {};\n    return { json: { ...b, has_email: !!l.email, subject: `Thanks for viewing ${p.title}`,\n      html: `Hi ${l.name},<br><br>Thank you for visiting <b>${p.title}</b> today. What did you think? If you would like to make an offer, see the paperwork or book a second visit, just reply to this email${a.name ? ' and ' + a.name + ' will take it from there' : ''}.<br><br>Plotwise team` } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "0e4ca31d-367d-4ecc-a584-c6456da62979",
+      "name": "Build message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "62528384-1ce1-4ac0-aeaf-e83980ea5fbd",
+              "leftValue": "={{ $json.has_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0a574913-2f13-4401-b8f6-a20037773346",
+      "name": "Has email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        540,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.lead.email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "efb4bbb9-8f32-4d13-a02f-bee2b495f820",
+      "name": "Send thank-you",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        810,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Build message').first().json.api_base + '/api/automation/runs/' + $('Build message').first().json.run_id + '/finish' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'success' }) }}",
+        "options": {}
+      },
+      "id": "2286ec7c-8b3f-4c0b-8d99-601d6d430b3c",
+      "name": "Finish run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build message": {
+      "main": [
+        [
+          {
+            "node": "Has email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has email?": {
+      "main": [
+        [
+          {
+            "node": "Send thank-you",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send thank-you": {
+      "main": [
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

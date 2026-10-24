@@ -1,0 +1,400 @@
+{
+  "name": "Plotwise 10 - Maintenance triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "maintenance-ticket",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "76d1312e-9008-49c2-b6e9-001de07de0cc",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "0bd09e39-fa69-473a-9ee5-d0fc7ac95e40",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body; const t = b.ticket;\n    const prompt = `You triage maintenance requests for rental properties.\nTicket: \"${t.title}\". Details: \"${t.description || ''}\". Property: ${b.property.title}.\nReturn ONLY JSON: {\"category\":\"plumbing|electrical|hvac|carpentry|cleaning|general\",\"urgency\":\"low|medium|high|emergency\",\"summary\":string (max 25 words)}.\nUse emergency only for gas smell, fire, flooding, sparks or a total power loss.`;\n    return { json: { ...b, gemini_body: { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } } } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "6c87a81f-bbda-40f0-ac10-0e2496336a41",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "91e1a1c3-9f62-4bf9-8da1-a8eb24c02fc3",
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Build prompt').item.json;\n    let ai = {}; try { ai = JSON.parse($json.candidates[0].content.parts[0].text); } catch (e) { /* fall back below */ }\n    const category = ['plumbing', 'electrical', 'hvac', 'carpentry', 'cleaning', 'general'].includes(ai.category) ? ai.category : 'general';\n    const urgency = ['low', 'medium', 'high', 'emergency'].includes(ai.urgency) ? ai.urgency : 'medium';\n    return { json: { ...prev, triage_body: { category, urgency, ai_summary: ai.summary || prev.ticket.title } } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "1c4d968a-2239-43bb-8afa-4fbb15d80bcd",
+      "name": "Parse triage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse triage').first().json.api_base + '/api/automation/tickets/' + $('Parse triage').first().json.ticket.id + '/triage' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Parse triage').first().json.triage_body) }}",
+        "options": {}
+      },
+      "id": "1e6ce65f-f1f4-4672-b54c-b6ba65453e93",
+      "name": "Save triage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = $json; const ctx = $('Parse triage').first().json; const v = t.vendor;\n    return { json: { has_vendor: !!(v && v.email), vendor_to: v && v.email, vendor_subject: `[${t.urgency.toUpperCase()}] ${ctx.ticket.title} at ${ctx.property.title}`,\n      vendor_html: `Hi ${v ? v.name : ''},<br><br>New ${t.category} job at <b>${ctx.property.title}</b>${ctx.property.address ? ', ' + ctx.property.address : ''}, ${ctx.property.city}.<br>Problem: ${ctx.ticket.title}. ${ctx.ticket.description || ''}<br>Reported by ${ctx.reporter.name}${ctx.reporter.phone ? ' (' + ctx.reporter.phone + ')' : ''}.<br>Urgency: <b>${t.urgency}</b>.<br><br>Please confirm when you can attend.<br>Plotwise property management`,\n      urgent: ['high', 'emergency'].includes(t.urgency), alert_text: `${t.urgency.toUpperCase()} ${t.category} ticket at ${ctx.property.title}: ${ctx.ticket.title}`, chat_id: (ctx.agent && ctx.agent.telegram_chat_id) || 'REPLACE_WITH_CHAT_ID' } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "b010836b-6a4c-4e6e-87bb-693fcb71c643",
+      "name": "Build notices",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "9df7770d-3f09-47c2-8f4e-ada8a459c1c5",
+              "leftValue": "={{ $('Build notices').first().json.has_vendor }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "09c9cd12-9484-46c9-bf5a-1f6fd9a8988e",
+      "name": "Vendor assigned?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1620,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Build notices').first().json.vendor_to }}",
+        "subject": "={{ $('Build notices').first().json.vendor_subject }}",
+        "message": "={{ $('Build notices').first().json.vendor_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "18cc50cd-8905-4654-b476-53a6fc8b9f81",
+      "name": "Email vendor",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1890,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "514ac7d0-590d-4756-b331-61a7637012bb",
+              "leftValue": "={{ $('Build notices').first().json.urgent }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5f8ec1e5-a229-4306-9a82-5c2f01e851d3",
+      "name": "Urgent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Build notices').first().json.chat_id }}",
+        "text": "={{ $('Build notices').first().json.alert_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "5322cf88-3163-4e6f-b9de-7257ee1b0f5c",
+      "name": "Alert agent",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2430,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse triage').first().json.api_base + '/api/automation/runs/' + $('Parse triage').first().json.run_id + '/finish' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'success' }) }}",
+        "options": {}
+      },
+      "id": "82f94725-c8b6-4422-8c2f-3c0ec3c35aec",
+      "name": "Finish run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2700,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse triage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse triage": {
+      "main": [
+        [
+          {
+            "node": "Save triage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save triage": {
+      "main": [
+        [
+          {
+            "node": "Build notices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build notices": {
+      "main": [
+        [
+          {
+            "node": "Vendor assigned?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vendor assigned?": {
+      "main": [
+        [
+          {
+            "node": "Email vendor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Urgent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email vendor": {
+      "main": [
+        [
+          {
+            "node": "Urgent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Urgent?": {
+      "main": [
+        [
+          {
+            "node": "Alert agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert agent": {
+      "main": [
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

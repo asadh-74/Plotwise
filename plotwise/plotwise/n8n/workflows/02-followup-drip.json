@@ -1,0 +1,303 @@
+{
+  "name": "Plotwise 02 - Follow-up drip",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "e20d54b9-d506-42c6-9445-fff5dd7ff3ff",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f2bb9337-62d0-469f-8012-44f1ec73465c",
+              "name": "api_base",
+              "value": "https://YOUR-APP.onrender.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5dcb84d1-de40-4991-8bd5-e12b3b60d70d",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.api_base + '/api/automation/due-followups' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "3ed0a3c7-ebf8-4131-a378-800a549b9665",
+      "name": "Due follow-ups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const l = $json; const step = l.followup_step || 0;\n    const tone = ['a friendly check-in (day 3)', 'a helpful follow-up that offers two viewing time options (day 7)', 'a short, no-pressure last note (day 14)'][step];\n    const prompt = `You write short follow-up emails for a real-estate agency in Pakistan.\nLead: ${l.name}. Property: ${l.property_title || 'our listings'}${l.property_price ? ' (PKR ' + l.property_price + ')' : ''}. Their first message: \"${l.message || ''}\". Agent: ${l.agent_name || 'our team'}.\nWrite ${tone}. Maximum 70 words. Warm, specific, no pressure, no invented facts. Return ONLY JSON: {\"subject\":string,\"body\":string}`;\n    return { json: { lead: l, api_base: $('Config').first().json.api_base, gemini_body: { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.5 } } } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "16c6982c-aaca-43a4-871b-0eee06e56aeb",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "0df0d6d0-b096-4461-84b4-3ddbc9dffe3f",
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Build prompt').item.json; const l = prev.lead;\n    let ai = {}; try { ai = JSON.parse($json.candidates[0].content.parts[0].text); } catch (e) { /* fall back below */ }\n    const subject = ai.subject || `Still interested in ${l.property_title || 'a property'}?`;\n    const text = ai.body || `Hi ${l.name},\\n\\nJust checking in about ${l.property_title || 'the property'}. I can arrange a viewing whenever suits you.\\n\\nBest regards,\\n${l.agent_name || 'Plotwise team'}`;\n    return { json: { api_base: prev.api_base, lead: l, subject, text, html: text.replace(/\\n/g, '<br>') } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "02fe0990-f64f-4791-b640-fe2c9f2d757d",
+      "name": "Parse follow-up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.lead.email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "f195f13d-bd85-419f-9b42-9cec67f538d7",
+      "name": "Send follow-up",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1620,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse follow-up').item.json.api_base + '/api/automation/leads/' + $('Parse follow-up').item.json.lead.id + '/followup-sent' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ subject: $('Parse follow-up').item.json.subject, body: $('Parse follow-up').item.json.text }) }}",
+        "options": {}
+      },
+      "id": "b258642d-01a4-437e-99de-7a9ba76bd2c1",
+      "name": "Record follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1890,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse follow-up').item.json.api_base + '/api/automation/runs/log' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'followup_drip', entity_type: 'lead', entity_id: $('Parse follow-up').item.json.lead.id }) }}",
+        "options": {}
+      },
+      "id": "6b0d4e0c-0acc-44e0-8f00-ec42e9bc26ec",
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Due follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Due follow-ups": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse follow-up": {
+      "main": [
+        [
+          {
+            "node": "Send follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send follow-up": {
+      "main": [
+        [
+          {
+            "node": "Record follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record follow-up": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

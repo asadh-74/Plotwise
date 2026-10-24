@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: plotwise
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_CA_PEM
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AUTOMATION_SECRET
+        generateValue: true
+      - key: N8N_WEBHOOK_BASE
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: DEMO_SEED
+        value: "true"

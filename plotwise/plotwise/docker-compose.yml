@@ -1,0 +1,20 @@
+# Local development: MySQL + n8n. The API runs with `npm run dev`.
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: plotwise
+    ports: ["3306:3306"]
+    volumes: [mysql_data:/var/lib/mysql]
+  n8n:
+    image: n8nio/n8n:latest
+    ports: ["5678:5678"]
+    environment:
+      - GENERIC_TIMEZONE=Asia/Karachi
+      - TZ=Asia/Karachi
+      - WEBHOOK_URL=http://localhost:5678/
+    volumes: [n8n_data:/home/node/.n8n]
+volumes:
+  mysql_data:
+  n8n_data:

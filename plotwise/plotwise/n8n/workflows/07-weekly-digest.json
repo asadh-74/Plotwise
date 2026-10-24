@@ -1,0 +1,205 @@
+{
+  "name": "Plotwise 07 - Weekly digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "0d86b544-5e00-40ab-ae31-924547aac729",
+      "name": "Monday 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b46f47e8-58e2-4ff9-ba31-eb9a3730e540",
+              "name": "api_base",
+              "value": "https://YOUR-APP.onrender.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1b2f197-b54c-4dd8-8fb3-e03db652ebe0",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.api_base + '/api/automation/weekly-digest' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "8892eb47-a378-41f2-a1a7-677c09d9d363",
+      "name": "Get digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json; const fmt = (v) => 'PKR ' + Number(v).toLocaleString('en-PK');\n    const props = d.properties.map((p) => `<li><b>${p.title}</b> (${p.city}) ${fmt(p.price)}${p.listing_type === 'rent' ? '/mo' : ''}</li>`).join('');\n    const deals = d.deals.map((x) => `<li>${x.title}, ${x.city}: ${fmt(x.price)}, <b>${x.price_gap_pct}% below</b> the estimated fair price of ${fmt(x.estimated_price)}</li>`).join('');\n    return d.subscribers.map((s) => ({ json: { to: s.email, subject: 'Your weekly property digest', html: `Hi ${s.name},<br><br><b>New listings</b><ul>${props}</ul><b>Bargains this week</b><ul>${deals || '<li>No new bargains.</li>'}</ul>Plotwise team` } }));"
+      },
+      "id": "77dad50b-f55d-4c4c-9788-5039c9c952a4",
+      "name": "Build digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "5ab7908f-3a44-4600-93b0-a23de20c90a4",
+      "name": "Send digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.api_base + '/api/automation/runs/log' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'weekly_digest', payload: { recipients: $('Build digest').all().length } }) }}",
+        "options": {}
+      },
+      "id": "386dc88e-0ea8-46f8-bd14-9793465242cf",
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      },
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Monday 09:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get digest": {
+      "main": [
+        [
+          {
+            "node": "Build digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build digest": {
+      "main": [
+        [
+          {
+            "node": "Send digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send digest": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -1,0 +1,375 @@
+{
+  "name": "Plotwise 01 - Lead instant reply and scoring",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-created",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "185da550-826f-4d68-8f48-00d6cf6859d1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "fd736d09-27a8-4512-a819-cd3388c9e214",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body; const l = b.lead; const p = b.property || {};\n    const prompt = `You are a friendly assistant for a real-estate agency in Pakistan. A new lead just sent an inquiry.\nLead: ${l.name}; budget: ${l.budget || 'unknown'}; source: ${l.source}; message: \"${l.message || ''}\"\nProperty: ${p.title || 'general inquiry'}, ${p.listing_type || ''}, price ${p.price || ''} ${p.currency || ''}, ${p.bedrooms || '?'} bed, ${p.city || ''}.\nTasks: 1) score the lead 0-100 on budget fit, urgency and clarity of intent. 2) label it hot (75+), warm (50-74) or cold. 3) give a one-sentence reason. 4) write a warm reply email of at most 90 words that mentions the specific property, answers the question only with facts given above, and invites them to book a viewing.\nReturn ONLY JSON: {\"score\":number,\"label\":\"hot|warm|cold\",\"reason\":string,\"reply_subject\":string,\"reply_body\":string}`;\n    return { json: { ...b, gemini_body: { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.4 } } } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "e27b0d36-1613-4e8f-89ef-366f1a3b320a",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "eb03a37e-588d-42d3-b57c-ac18a6c71271",
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Build prompt').item.json; const l = prev.lead; const p = prev.property || {};\n    let ai = {}; try { ai = JSON.parse($json.candidates[0].content.parts[0].text); } catch (e) { /* fall back below */ }\n    const score = Math.max(0, Math.min(100, Number(ai.score) || 50));\n    const label = ['hot', 'warm', 'cold'].includes(ai.label) ? ai.label : score >= 75 ? 'hot' : score >= 50 ? 'warm' : 'cold';\n    const subject = ai.reply_subject || `Re: ${p.title || 'your property inquiry'}`;\n    const text = ai.reply_body || `Hi ${l.name},\\n\\nThanks for your interest in ${p.title || 'our properties'}. I would be glad to arrange a viewing. Reply with a time that suits you.\\n\\nBest regards,\\nPlotwise team`;\n    const reason = ai.reason || 'AI scoring unavailable, default score applied';\n    return { json: { api_base: prev.api_base, run_id: prev.run_id, lead: l, property: p, agent: prev.agent, score, label, is_hot: label === 'hot', has_email: !!l.email, reply_subject: subject, reply_html: text.replace(/\\n/g, '<br>'),\n      alert_text: `HOT lead: ${l.name} (${score}/100)\\n${p.title || 'General inquiry'}\\n${reason}\\n${l.phone || l.email || ''}`,\n      save_body: { run_id: prev.run_id, score, label, reason, reply_subject: subject, reply_body: text, channel: l.email ? 'email' : 'whatsapp', message_status: l.email ? 'sent' : 'queued' } } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "6984a9a0-52f0-4122-8263-9db035cbff34",
+      "name": "Parse AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "6338a935-be66-4df1-8a26-534a68dede8c",
+              "leftValue": "={{ $json.has_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "493c9063-3ff8-46ca-92dd-dfcaff475e84",
+      "name": "Has email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1080,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.lead.email }}",
+        "subject": "={{ $json.reply_subject }}",
+        "message": "={{ $json.reply_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "3df432d1-55cc-4093-b5da-58d2d12c98f3",
+      "name": "Send reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1350,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse AI').first().json.api_base + '/api/automation/leads/' + $('Parse AI').first().json.lead.id + '/score' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Parse AI').first().json.save_body) }}",
+        "options": {}
+      },
+      "id": "a515b92a-c94f-47f6-bd38-3a42ddb8fa61",
+      "name": "Save score and reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "059d5f19-8a1a-4b3e-8d41-117fbeca1c7a",
+              "leftValue": "={{ $('Parse AI').first().json.is_hot }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3dd2e7e-a535-4fad-a2af-44471acc9742",
+      "name": "Hot lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1890,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse AI').first().json.agent?.telegram_chat_id || 'REPLACE_WITH_CHAT_ID' }}",
+        "text": "={{ $('Parse AI').first().json.alert_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "6bc32300-a774-4c23-898b-65da8dfbd7b8",
+      "name": "Alert agent",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2160,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "Telegram bot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse AI').first().json.api_base + '/api/automation/runs/' + $('Parse AI').first().json.run_id + '/finish' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'success' }) }}",
+        "options": {}
+      },
+      "id": "914da664-426c-4615-9b34-6da120ed8eb9",
+      "name": "Finish run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2430,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI": {
+      "main": [
+        [
+          {
+            "node": "Has email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has email?": {
+      "main": [
+        [
+          {
+            "node": "Send reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save score and reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send reply": {
+      "main": [
+        [
+          {
+            "node": "Save score and reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save score and reply": {
+      "main": [
+        [
+          {
+            "node": "Hot lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hot lead?": {
+      "main": [
+        [
+          {
+            "node": "Alert agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert agent": {
+      "main": [
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

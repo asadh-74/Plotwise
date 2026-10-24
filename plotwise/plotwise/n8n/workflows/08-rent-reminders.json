@@ -1,0 +1,325 @@
+{
+  "name": "Plotwise 08 - Rent reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "527cf5a3-bd03-4bb0-b0b7-76c03ae37baf",
+      "name": "Daily 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "84420a47-3aa7-4a4a-9c96-01b132061cdb",
+              "name": "api_base",
+              "value": "https://YOUR-APP.onrender.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "37df4170-3741-4f7c-8683-c0e39ecbfcf0",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.api_base + '/api/automation/rent-due' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "90bafcd0-a262-41dc-a603-d76c9f81e249",
+      "name": "Rent due",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json; const amt = 'PKR ' + Number(r.amount).toLocaleString('en-PK'); const od = r.days_overdue;\n    const subject = od <= 0 ? `Rent ${od === 0 ? 'due today' : 'due soon'}: ${r.property_title}` : `Overdue rent: ${r.property_title} (${od} days)`;\n    const line = od <= 0 ? `This is a reminder that ${amt} for ${r.property_title} is due on ${r.due_date}.` : `Your rent of ${amt} for ${r.property_title} was due on ${r.due_date} and is ${od} day(s) overdue. Please pay as soon as you can, or reply if there is a problem.`;\n    return { json: { id: r.id, api_base: $('Config').first().json.api_base, to: r.tenant_email, subject, html: `Hi ${r.tenant_name},<br><br>${line}<br><br>Thank you,<br>Plotwise property management`,\n      escalate: od === 7 || od === 14, landlord_to: r.landlord_email, landlord_subject: `Rent overdue at ${r.property_title}`,\n      landlord_html: `Hi ${r.landlord_name},<br><br>${r.tenant_name}'s rent of ${amt} for ${r.property_title} is ${od} days overdue. We have sent reminders and will keep following up.<br><br>Plotwise property management` } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "e574d6c8-6ea2-41a0-a734-e21c4806bad8",
+      "name": "Build reminder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "37ca468e-eb4a-48ac-954b-5cc8b7506f78",
+      "name": "Remind tenant",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Build reminder').item.json.api_base + '/api/automation/rent/' + $('Build reminder').item.json.id + '/reminded' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {}
+      },
+      "id": "b3765115-8fe6-4fc4-9a38-b6513316806e",
+      "name": "Mark reminded",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a0953ee9-5eff-4221-ba41-41b65ec83e5c",
+              "leftValue": "={{ $('Build reminder').item.json.escalate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ced9f871-e649-4e96-ba15-507ed55b8dc0",
+      "name": "Escalate to landlord?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1620,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Build reminder').item.json.landlord_to }}",
+        "subject": "={{ $('Build reminder').item.json.landlord_subject }}",
+        "message": "={{ $('Build reminder').item.json.landlord_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e0a52e95-c919-4435-99c1-5e75e3c4913b",
+      "name": "Notify landlord",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1890,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Build reminder').item.json.api_base + '/api/automation/runs/log' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'rent_reminder', entity_type: 'rent_payment', entity_id: $('Build reminder').item.json.id }) }}",
+        "options": {}
+      },
+      "id": "46a9f6f5-60b3-4951-9964-a34af359e037",
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 09:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Rent due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rent due": {
+      "main": [
+        [
+          {
+            "node": "Build reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build reminder": {
+      "main": [
+        [
+          {
+            "node": "Remind tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remind tenant": {
+      "main": [
+        [
+          {
+            "node": "Mark reminded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark reminded": {
+      "main": [
+        [
+          {
+            "node": "Escalate to landlord?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate to landlord?": {
+      "main": [
+        [
+          {
+            "node": "Notify landlord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify landlord": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -1,0 +1,265 @@
+{
+  "name": "Plotwise 03 - Viewing scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "viewing-booked",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "a1705cc0-73ce-40fb-a6c9-d2381a7dc0aa",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "ec21b2ff-3c76-44f7-b49f-b3c88b48784d",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body; const v = b.viewing; const p = b.property || {}; const l = b.lead || {}; const a = b.agent || {};\n    const start = v.scheduled_at.replace(' ', 'T') + '+05:00';\n    const end = new Date(new Date(start).getTime() + 3600000).toISOString();\n    const when = v.scheduled_at.slice(0, 16).replace('T', ' ');\n    return { json: { ...b, start, end, summary: `Viewing: ${p.title} with ${l.name}`, description: `Lead: ${l.name}\\nPhone: ${l.phone || '-'}\\nEmail: ${l.email || '-'}\\nAgent: ${a.name || '-'}`, location: [p.address, p.city].filter(Boolean).join(', '), has_email: !!l.email,\n      confirm_subject: `Your viewing of ${p.title} is confirmed`,\n      confirm_html: `Hi ${l.name},<br><br>Your viewing of <b>${p.title}</b> is booked for <b>${when}</b>${p.address ? ' at ' + p.address + ', ' + p.city : ''}.<br>${a.name ? 'Your agent is ' + a.name + '.<br>' : ''}<br>Reply to this email if you need to change the time.<br><br>Plotwise team` } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "90b9fc3a-703e-4bf1-88de-2cf65c661225",
+      "name": "Prepare",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "primary",
+          "mode": "id"
+        },
+        "start": "={{ $json.start }}",
+        "end": "={{ $json.end }}",
+        "additionalFields": {
+          "summary": "={{ $json.summary }}",
+          "description": "={{ $json.description }}",
+          "location": "={{ $json.location }}"
+        }
+      },
+      "id": "d8ceb18e-4c96-4ec3-b4b0-23937b66a221",
+      "name": "Create calendar event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare').first().json.api_base + '/api/automation/viewings/' + $('Prepare').first().json.viewing.id + '/calendar' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ calendar_event_id: $json.id }) }}",
+        "options": {}
+      },
+      "id": "c3050d04-1fd1-414f-a837-02bd78891d3a",
+      "name": "Save event id",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        810,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "1a6c1993-0377-49c9-b649-2a218c1e1f86",
+              "leftValue": "={{ $('Prepare').first().json.has_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d0ce8a91-d7a8-4881-91e6-f1a05e0f2bbd",
+      "name": "Lead has email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1080,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Prepare').first().json.lead.email }}",
+        "subject": "={{ $('Prepare').first().json.confirm_subject }}",
+        "message": "={{ $('Prepare').first().json.confirm_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "035e325b-cfbd-4914-bfdf-786ec4e69dd0",
+      "name": "Confirm to lead",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1350,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare').first().json.api_base + '/api/automation/runs/' + $('Prepare').first().json.run_id + '/finish' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'success' }) }}",
+        "options": {}
+      },
+      "id": "afb0504c-8394-4641-9a4b-472cca380a0a",
+      "name": "Finish run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare": {
+      "main": [
+        [
+          {
+            "node": "Create calendar event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create calendar event": {
+      "main": [
+        [
+          {
+            "node": "Save event id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save event id": {
+      "main": [
+        [
+          {
+            "node": "Lead has email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead has email?": {
+      "main": [
+        [
+          {
+            "node": "Confirm to lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm to lead": {
+      "main": [
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

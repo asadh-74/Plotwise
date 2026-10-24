@@ -1,0 +1,238 @@
+{
+  "name": "Plotwise 04 - Viewing reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "ff08ac7e-4cf7-4ca7-adb8-cb730351d819",
+      "name": "Every hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "425c8eb9-6037-4463-a9c7-563d376946a5",
+              "name": "api_base",
+              "value": "https://YOUR-APP.onrender.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3c16eed0-0a32-4c38-a63f-2d0ab6a96ffe",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.api_base + '/api/automation/due-reminders' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "e9e1d0d1-6f20-4040-a6fa-89439f3084db",
+      "name": "Due reminders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $json; const when = v.scheduled_at.slice(0, 16).replace('T', ' ');\n    return { json: { id: v.id, api_base: $('Config').first().json.api_base, to: v.lead_email, subject: `Reminder: viewing of ${v.property_title} tomorrow`,\n      html: `Hi ${v.lead_name},<br><br>A reminder that your viewing of <b>${v.property_title}</b> is at <b>${when}</b>${v.address ? ', ' + v.address + ', ' + v.city : ''}.<br>${v.agent_name ? 'Your agent ' + v.agent_name + (v.agent_phone ? ' (' + v.agent_phone + ')' : '') + ' will meet you there.<br>' : ''}<br>Plotwise team` } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "5b70b481-a366-4720-8948-5b9722362eb5",
+      "name": "Build reminder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "c213c3de-a48a-4fd7-af9e-4cb9f4d1d138",
+      "name": "Send reminder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Build reminder').item.json.api_base + '/api/automation/viewings/' + $('Build reminder').item.json.id + '/reminder-sent' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {}
+      },
+      "id": "e4368738-2be0-46e0-b059-f9429f7c7a91",
+      "name": "Mark reminder sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Build reminder').item.json.api_base + '/api/automation/runs/log' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'viewing_reminder', entity_type: 'viewing', entity_id: $('Build reminder').item.json.id }) }}",
+        "options": {}
+      },
+      "id": "259e5476-03bb-43e1-8fb2-c8a0aa65bccf",
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every hour": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Due reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Due reminders": {
+      "main": [
+        [
+          {
+            "node": "Build reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build reminder": {
+      "main": [
+        [
+          {
+            "node": "Send reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send reminder": {
+      "main": [
+        [
+          {
+            "node": "Mark reminder sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark reminder sent": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

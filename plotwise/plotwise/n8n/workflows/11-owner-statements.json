@@ -1,0 +1,240 @@
+{
+  "name": "Plotwise 11 - Owner statements",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "monthsInterval": 1,
+              "triggerAtDayOfMonth": 1,
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "d67f0c78-0a26-46cd-8fc5-2634015dd700",
+      "name": "1st of month 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "124ba0f0-720c-4f2e-a94a-37d802366b43",
+              "name": "api_base",
+              "value": "https://YOUR-APP.onrender.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d5e467d0-c645-4f9a-b50d-df4946ff88b0",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.api_base + '/api/automation/owner-statements' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "af927967-8913-447c-9e9b-259f0762d40f",
+      "name": "Get statements",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $json; const fmt = (v) => 'PKR ' + Number(v).toLocaleString('en-PK');\n    const rows = s.items.map((i) => `<tr><td>${i.property}</td><td align=\"right\">${fmt(i.amount)}</td></tr>`).join('');\n    return { json: { ...s, api_base: $('Config').first().json.api_base, subject: `Your rent statement for ${s.period}`,\n      html: `Hi ${s.landlord_name},<br><br>Here is your rent summary for <b>${s.period}</b>.<br><br><table cellpadding=\"6\" border=\"1\" style=\"border-collapse:collapse\"><tr><th align=\"left\">Property</th><th>Collected</th></tr>${rows}<tr><td><b>Total</b></td><td align=\"right\"><b>${fmt(s.rent_collected)}</b></td></tr></table>${s.tickets ? '<br>Maintenance tickets opened this month: ' + s.tickets + '.' : ''}<br><br>Plotwise property management` } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "38a5c060-542a-456f-ae9b-5571fbb5f9e6",
+      "name": "Build statement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.landlord_email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "205a7ede-e1ad-4466-887f-f1c19bbb8357",
+      "name": "Email statement",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Build statement').item.json.api_base + '/api/automation/owner-statements' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ landlord_id: $('Build statement').item.json.landlord_id, period: $('Build statement').item.json.period, rent_collected: $('Build statement').item.json.rent_collected, expenses: 0 }) }}",
+        "options": {}
+      },
+      "id": "addc22cd-13fd-45a0-8538-4af348d81cec",
+      "name": "Record statement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Build statement').item.json.api_base + '/api/automation/runs/log' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'owner_statement', entity_type: 'landlord', entity_id: $('Build statement').item.json.landlord_id }) }}",
+        "options": {}
+      },
+      "id": "1f3181ec-8be2-49bb-962b-abaffc81fbc5",
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "1st of month 08:00": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get statements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get statements": {
+      "main": [
+        [
+          {
+            "node": "Build statement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build statement": {
+      "main": [
+        [
+          {
+            "node": "Email statement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email statement": {
+      "main": [
+        [
+          {
+            "node": "Record statement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record statement": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

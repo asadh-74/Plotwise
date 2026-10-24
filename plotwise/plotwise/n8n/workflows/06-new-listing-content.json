@@ -1,0 +1,203 @@
+{
+  "name": "Plotwise 06 - Listing content writer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-listing",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "9c9b64ac-7882-45a8-b2e9-3b59c1e375f3",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "63897e32-79ab-409a-ae71-8f62f80ec911",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $json.body; const p = b.property;\n    const prompt = `Write marketing copy for a property listing in Pakistan using ONLY these facts, no invented amenities.\nTitle: ${p.title}. For ${p.listing_type}. Price PKR ${p.price}. ${p.bedrooms || '?'} bedrooms. ${p.area_sqft || '?'} sq ft. ${p.address || ''}, ${p.city}. Notes from the agent: ${p.description || 'none'}.\nReturn ONLY JSON: {\"ai_description\":string (90-120 words, plain text),\"social_posts\":{\"facebook\":string,\"instagram\":string (include 5 hashtags),\"linkedin\":string}}`;\n    return { json: { ...b, gemini_body: { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.7 } } } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "886930b5-4701-40d3-98c4-cad66ccc299f",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gemini_body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "1815dddf-68eb-450f-b96d-2b9505e96084",
+      "name": "Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        540,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Gemini API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Build prompt').item.json; const p = prev.property;\n    let ai = {}; try { ai = JSON.parse($json.candidates[0].content.parts[0].text); } catch (e) { /* fall back below */ }\n    const desc = ai.ai_description || `${p.title}: ${p.area_sqft || ''} sq ft in ${p.address || p.city}, ${p.city}. Contact us to arrange a viewing.`;\n    return { json: { api_base: prev.api_base, run_id: prev.run_id, property: p, save_body: { ai_description: desc, social_posts: ai.social_posts || null } } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "470298ca-cc39-4bc3-8715-c9c0c2784971",
+      "name": "Parse AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        810,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse AI').first().json.api_base + '/api/automation/properties/' + $('Parse AI').first().json.property.id + '/ai-content' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Parse AI').first().json.save_body) }}",
+        "options": {}
+      },
+      "id": "641dc4e5-e455-4c38-8f53-b7f4c3436c71",
+      "name": "Save content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Parse AI').first().json.api_base + '/api/automation/runs/' + $('Parse AI').first().json.run_id + '/finish' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'success' }) }}",
+        "options": {}
+      },
+      "id": "c97a02b9-cb6b-431e-a053-152b1e8c33e4",
+      "name": "Finish run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1350,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Plotwise API Secret"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI": {
+      "main": [
+        [
+          {
+            "node": "Save content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save content": {
+      "main": [
+        [
+          {
+            "node": "Finish run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
