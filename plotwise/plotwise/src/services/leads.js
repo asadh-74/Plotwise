@@ -32,17 +32,22 @@ async function createLead(d, { skipAutomation = false } = {}) {
 
 /** Called by n8n (or the local fallback) once the AI has scored the lead and the reply was sent. */
 async function applyLeadScore(leadId, d) {
-  const status = d.message_status === 'queued' ? 'queued' : 'sent';
-  await run(
-    `UPDATE leads SET score=?, score_label=?, score_reason=?, status=IF(status='new','contacted',status),
-       last_contacted_at=NOW(), next_followup_at=DATE_ADD(NOW(), INTERVAL 3 DAY), followup_step=0 WHERE id=?`,
-    [d.score, d.label, String(d.reason || '').slice(0, 490), leadId]
-  );
+  // A generated draft is not evidence of delivery. Only an explicit sender result
+  // may advance contact timestamps and the follow-up schedule.
+  const status = ['sent', 'failed'].includes(d.message_status) ? d.message_status : 'queued';
+  const generatedBy = d.generated_by === 'template' ? 'template' : 'ai';
+  await run('UPDATE leads SET score=?, score_label=?, score_reason=? WHERE id=?',
+    [d.score, d.label, String(d.reason || '').slice(0, 490), leadId]);
+  if (status === 'sent') {
+    await run(`UPDATE leads SET status=IF(status='new','contacted',status),
+      last_contacted_at=NOW(), next_followup_at=DATE_ADD(NOW(), INTERVAL 3 DAY), followup_step=0 WHERE id=?`, [leadId]);
+  }
   await run(`INSERT INTO lead_activities (lead_id, type, details) VALUES (?, 'scored', ?)`, [leadId, JSON.stringify({ score: d.score, label: d.label, reason: d.reason })]);
-  await run(`INSERT INTO lead_activities (lead_id, type, details) VALUES (?, 'ai_reply_sent', ?)`, [leadId, JSON.stringify({ channel: d.channel, status })]);
+  await run('INSERT INTO lead_activities (lead_id, type, details) VALUES (?,?,?)',
+    [leadId, status === 'sent' ? 'ai_reply_sent' : 'note', JSON.stringify({ channel: d.channel, status, text: status === 'failed' ? 'Reply delivery failed.' : 'Reply prepared locally; delivery is not confirmed.' })]);
   await run(
-    `INSERT INTO messages (lead_id, channel, direction, subject, body, generated_by, status, sent_at) VALUES (?,?, 'outbound', ?,?, 'ai', ?, NOW())`,
-    [leadId, d.channel || 'email', d.reply_subject, d.reply_body, status]
+    `INSERT INTO messages (lead_id, channel, direction, subject, body, generated_by, status, sent_at) VALUES (?,?, 'outbound', ?,?,?,?, IF(?='sent', NOW(), NULL))`,
+    [leadId, d.channel || 'email', d.reply_subject, d.reply_body, generatedBy, status, status]
   );
 }
 
@@ -68,9 +73,10 @@ async function localLeadAutomation(lead, prop, runId) {
     score, label, reason,
     channel: lead.email ? 'email' : 'whatsapp',
     reply_subject: `Re: ${title}`,
-    reply_body: `Hi ${lead.name},\n\nThanks for asking about ${title}. It is still available and I would be glad to show it to you. Reply with a day and time that suits you, or use the Book a viewing button on the listing page.\n\nBest regards,\nPlotwise team`,
-    message_status: lead.email ? 'sent' : 'queued',
+    reply_body: `Hi ${lead.name},\n\nThanks for asking about ${title}. Our team will confirm availability and viewing options. Reply with a day and time that suits you, or use the Book a viewing button on the listing page.\n\nBest regards,\nPlotwise team`,
+    message_status: 'queued',
+    generated_by: 'template',
   });
 }
 
-module.exports = { createLead, applyLeadScore, slimProperty, finishRun };
+module.exports = { localLeadAutomation, ruleScore, createLead, applyLeadScore, slimProperty, finishRun };

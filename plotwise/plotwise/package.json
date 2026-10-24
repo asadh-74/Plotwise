@@ -1,16 +1,19 @@
 {
   "name": "plotwise",
   "version": "1.0.0",
-  "description": "Plotwise — real estate platform: sales CRM, deal finder and property management, automated with n8n",
+  "description": "Plotwise \u2014 real estate platform: sales CRM, deal finder and property management, automated with n8n",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
-    "workflows": "node n8n/generate.js"
+    "workflows": "node n8n/generate.js",
+    "test": "node --test"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

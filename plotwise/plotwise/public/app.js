@@ -267,7 +267,7 @@ const ACT = {
   viewing_booked: (d) => `Viewing booked for ${dt(d.scheduled_at)}`,
   status_change: (d) => `Status changed from ${label(d.from)} to ${label(d.to)}${d.by ? ' by ' + d.by : ''}`,
   assigned: (d) => `Reassigned${d.by ? ' by ' + d.by : ''}`,
-  note: (d) => `Note from ${d.by}: ${d.text}`,
+  note: (d) => d.by ? `Note from ${d.by}: ${d.text}` : (d.text || 'Note added'),
   lease_created: (d) => `Lease #${d.lease_id} created`,
 };
 const secs = (a, b) => Math.round((new Date(b.replace(' ', 'T')) - new Date(a.replace(' ', 'T'))) / 1000);

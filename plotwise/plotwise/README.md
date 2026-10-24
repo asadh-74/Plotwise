@@ -12,7 +12,7 @@ A real estate platform that runs the whole property lifecycle in one app, with t
 
 The modules are connected: a deal becomes a draft listing, a lead becomes a tenant and a lease, and a leased property moves to *managed*.
 
-> **Result the demo shows:** a new inquiry gets a personalised, AI-written reply and a lead score in **under a minute** (the Overview page shows the measured average), with no one touching it.
+> **Demo modes:** Without n8n, selected workflows use deterministic rules. Lead replies are saved as queued templates, not sent emails, and do not advance contact or follow-up timestamps. AI generation, email delivery, calendar actions and scheduled workflows require configured external integrations. No delivery-speed guarantee has been established.
 
 ## Architecture
 
@@ -82,7 +82,7 @@ Local database option: `docker compose up -d mysql`, then `DATABASE_URL=mysql://
 
 1. Push to GitHub. In Render choose **New → Blueprint** (it reads `render.yaml`), or create a Web Service with build `npm install` and start `npm start`.
 2. Set `DATABASE_URL`, `DB_CA_PEM`, `APP_BASE_URL` (your Render URL), `N8N_WEBHOOK_BASE` and keep `DEMO_SEED=true` for the first boot.
-3. Aiven's IP allow-list: Render's outbound IPs can change, so leave it open (SSL and a strong password protect the database).
+3. Restrict database network access to the deployment's documented outbound addresses where supported. Configure the database CA certificate for TLS verification; do not publish credentials.
 4. The free Render plan sleeps when idle, so the first request after a pause is slow.
 
 ## Connect n8n
@@ -100,7 +100,7 @@ Local database option: `docker compose up -d mysql`, then `DATABASE_URL=mysql://
 ## 60-second demo script
 
 1. Log in as the agent and open **Automations**. Click **Simulate a new lead**.
-2. The run appears, turns green, and the lead drawer opens with the **reply time**, the AI score and reason, the timeline and the email that was sent.
+2. The run appears, turns green, and the lead drawer opens with the **reply time**, the score and reason, the timeline and the prepared reply. In local mode this is a queued template; it is not delivered.
 3. Open **Overview** for the funnel, source mix, listing performance and automation success rate.
 4. **Deal finder**: load sample market data, save a search, create a listing from a bargain.
 5. **Property management**: create a lease from a won lead, see the rent schedule, report a ticket as the tenant and watch it get triaged.
@@ -127,3 +127,9 @@ docker-compose.yml  Local MySQL and n8n
 - Market data is sample/CSV based on purpose. The importer (`POST /api/deals/import`) accepts rows from any source, so a portal-specific scraper can plug in per client without changing the rest.
 - Listing photos in the seed data come from picsum.photos placeholders. Replace them with real photos for a client demo.
 - The demo accounts and `DEMO_SEED` are for showcasing. Turn them off for a real deployment.
+
+## Verification
+
+Run `npm test` for delivery-status regression checks and `node --check public/app.js` for frontend syntax. These tests use a stub database and do not certify MySQL, n8n, email, or hosted integration behavior. GitHub Actions runs these checks on pushes and pull requests.
+
+Previously stored local-demo replies may have been marked sent by older versions. This fix affects new processing only; existing rows are not rewritten. Use fresh fictional leads when recording the demo.

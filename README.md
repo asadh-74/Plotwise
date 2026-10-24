@@ -39,7 +39,7 @@ Requirements: Node.js 18+ and Docker Compose (for the included MySQL service).
 ```bash
 git clone https://github.com/asadh-74/Plotwise.git
 cd Plotwise/plotwise/plotwise
-npm install
+npm ci
 docker compose up -d mysql
 cp .env.example .env
 ```
@@ -74,3 +74,9 @@ For a concise walkthrough, see the [60-second demo script](plotwise/plotwise/REA
 - **Source:** [github.com/asadh-74/Plotwise](https://github.com/asadh-74/Plotwise)
 - **Detailed README:** [Architecture, setup, API, and workflow documentation](plotwise/plotwise/README.md)
 - **Automation definitions:** [n8n/workflows](plotwise/plotwise/n8n/workflows)
+
+## Delivery status and verification
+
+Local rule-based replies are saved as **queued templates**, never as sent emails. Only an explicit delivery result updates contact timestamps. Existing historical records are not rewritten by this change.
+
+Run `npm test` from `plotwise/plotwise`; CI checks delivery-state regressions and frontend syntax. MySQL and external integrations require separate end-to-end verification. See [Upwork portfolio copy](UPWORK.md) for a description that distinguishes implemented workflows from configured integrations.
