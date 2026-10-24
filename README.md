@@ -1,82 +1,151 @@
+<div align="center">
+
 # Plotwise
+### Real estate operations, in one workspace.
 
-**Real estate operations, brought into one workspace.** Plotwise is a full-stack property platform concept for agencies that need to move from a new listing or inquiry to a viewing, signed lease, and ongoing property management—with repeatable workflow automation along the way.
+**Property listings · Lead management · Viewings · Leases · Maintenance · Automation**
 
-> Built as a portfolio project to demonstrate practical product engineering across a Node.js API, MySQL data model, responsive browser UI, and n8n automation workflows. Demo records and market data are illustrative.
+[Technical guide](plotwise/plotwise/README.md) · [Workflow definitions](plotwise/plotwise/n8n/workflows) · [Upwork project summary](UPWORK.md)
 
-## Why an agency would use it
+![Checks](https://github.com/asadh-74/Plotwise/actions/workflows/test.yml/badge.svg)
 
-A small property team often has listings in one place, inquiries in another, viewing details in email, and rent or maintenance follow-up in spreadsheets. Plotwise brings those workflows into one operational dashboard so agents can follow up consistently and property managers can see what needs attention.
+</div>
 
-## Product areas
+## The problem
 
-- **Sales CRM:** searchable property listings, inquiry capture, lead pipeline, viewing calendar, and performance analytics.
-- **Deal finder:** import market listings, compare asking prices, flag potential opportunities, and save search criteria for alerts.
-- **Property management:** leases, rent schedules, overdue tracking, maintenance tickets, and owner statements.
-- **Workflow automation:** 12 example n8n workflows for lead scoring and replies, viewing coordination, follow-ups, listing content, rent and lease reminders, maintenance triage, owner statements, and deal alerts.
-- **Role-aware access:** separate staff, buyer, landlord, and tenant experiences backed by JWT authentication.
+A property agency needs more than a listing page. Enquiries need follow-up, agents need a shared pipeline, viewings need coordination, and landlords need visibility into rent and maintenance. Moving between disconnected spreadsheets makes that work difficult to track.
 
-## Example workflow
+Plotwise is a full-stack portfolio application that brings these workflows together. It demonstrates an Express API, a MySQL data model, a responsive browser interface, and integration points for n8n.
 
-1. A prospective buyer sends an inquiry about a listing.
-2. Plotwise records the lead and starts the configured automation.
-3. n8n can score and categorize the inquiry, draft a contextual response, and notify the agent.
-4. The agent tracks follow-up and books a viewing.
-5. When a lead becomes a tenant, the property can move into lease and maintenance workflows.
+## What is included
 
-If n8n is not configured, the app includes local fallback behavior for selected demo workflows. Email, calendar, and messaging actions require the corresponding n8n credentials and configuration.
+| Workspace | Capabilities in the codebase |
+|---|---|
+| Property listings | Search and filters, map display, property details and enquiry capture |
+| Sales CRM | Lead pipeline, agent assignment, activity history and reply records |
+| Viewings | Booking, availability and viewing status |
+| Deal finder | Import market records, compare listings and save searches |
+| Property management | Leases, rent schedules, maintenance tickets and owner statements |
+| Analytics | Pipeline summaries and automation activity |
+| Automation | Twelve importable n8n workflow definitions and local fallbacks for selected actions |
+| Accounts | JWT authentication and role checks for admin, agent, buyer, landlord and tenant |
 
-## Technology
+These are portfolio capabilities, not a claim of production readiness or a completed security audit. Market data and demo records are illustrative.
 
-**Node.js · Express · MySQL · vanilla JavaScript · n8n · Gemini API · Leaflet · Docker Compose**
+## A clear distinction: prepared versus delivered
 
-The application code and detailed technical guide are in [plotwise/plotwise](plotwise/plotwise/README.md). It includes the API routes, SQL schema, seed and migration scripts, UI, Render blueprint, and importable n8n workflow JSON files.
+**Local demo mode** requires no AI key or n8n account. It uses deterministic rules for selected workflows. Lead replies are saved as **queued templates**, and no email is sent. Generating a template does not mark a lead contacted or start its follow-up timer.
 
-## Run the demo locally
+**Connected mode** requires a separately configured n8n instance and provider credentials. AI scoring, email delivery, calendar events and scheduled actions must be verified against those providers. Having workflow JSON in the repository does not establish that an integration is active.
 
-Requirements: Node.js 18+ and Docker Compose (for the included MySQL service).
+Previously stored demo replies may retain delivery labels created by older versions. The correction applies to new processing; historical rows are not rewritten.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    UI[Browser workspace] --> API[Express REST API]
+    API --> DB[(MySQL)]
+    API --> Rules[Local rule-based fallback]
+    API --> N8N[Optional n8n workflows]
+    N8N --> Providers[AI, email and calendar providers]
+    N8N --> API
+```
+
+**Stack:** Node.js, Express, MySQL, JavaScript, HTML/CSS, JWT, Leaflet and n8n. The optional workflow definitions include Gemini integration. No frontend build step is required.
+
+## Run locally
+
+Use Node.js 22 and Docker Compose for the local MySQL service.
 
 ```bash
 git clone https://github.com/asadh-74/Plotwise.git
 cd Plotwise/plotwise/plotwise
 npm ci
-docker compose up -d mysql
 cp .env.example .env
+docker compose up -d mysql
 ```
 
-Add a strong local JWT_SECRET and AUTOMATION_SECRET to .env. The example configuration uses the included local MySQL database and enables illustrative demo records.
+On Windows Command Prompt, use `copy .env.example .env`. Edit `.env` and replace both secret placeholders with separate random values. You can generate a value locally with:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Keep `N8N_WEBHOOK_BASE` empty for local demo mode. The supplied local database configuration matches Docker Compose. Wait for MySQL to finish initializing, then run:
 
 ```bash
 npm run dev
 ```
 
-Open http://localhost:3000. The health endpoint is http://localhost:3000/health.
+Open **http://localhost:3000**. With fictional demo seeding enabled, use `agent@plotwise.demo` and password `demo1234`. Other seeded roles use `admin`, `buyer`, `landlord` or `tenant` before `@plotwise.demo`. These are public demo credentials, never accounts for private data.
 
-To preview the n8n workflows, start the full Compose stack and follow the credential and webhook setup in the [technical guide](plotwise/plotwise/README.md#connect-n8n). External integrations are opt-in; never commit real API keys, database passwords, or customer information.
+## Configuration
 
-## Deployment
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Dedicated MySQL connection string; required for hosted operation |
+| `JWT_SECRET` | Private, randomly generated signing secret |
+| `AUTOMATION_SECRET` | Separate private secret for n8n callbacks |
+| `DB_CA_PEM` / `DB_CA_PATH` | Database CA certificate for verified TLS |
+| `DEMO_SEED` | Set `true` only for fictional demo data |
+| `APP_BASE_URL` | Public application address used in workflows |
+| `N8N_WEBHOOK_BASE` | Optional production n8n webhook base |
+| `APP_TZ_OFFSET` | Database timezone offset; local example is `+05:00` |
+| `PORT` | Listening port; provided by Render |
 
-The Render blueprint is at [plotwise/plotwise/render.yaml](plotwise/plotwise/render.yaml). When creating a service from the blueprint, set the repository root directory to plotwise/plotwise, then configure the database and optional integration environment variables in Render. Review the demo-seed setting and demo accounts before exposing any deployment to real users.
+Store private values in the hosting environment. Never commit `.env`, database passwords, API keys or customer records. Use a dedicated database/schema for Plotwise to avoid collisions with other applications.
 
-## Portfolio walkthrough
+## Render deployment
 
-A reviewer can explore:
+Create a **Node web service** from this repository with:
 
-- The product UI and responsive real estate workflows.
-- The API routes and relational schema.
-- The n8n workflow definitions and their event-driven integration points.
-- The local demo setup and deployment configuration.
+| Setting | Value |
+|---|---|
+| Branch | `main` |
+| Root directory | `plotwise/plotwise` |
+| Build command | `npm ci` |
+| Start command | `npm start` |
+| Health check | `/health` |
+| Compute | Free, subject to Render availability and limits |
 
-For a concise walkthrough, see the [60-second demo script](plotwise/plotwise/README.md#60-second-demo-script).
+If the service root is left empty, use `npm --prefix plotwise/plotwise ci` and `npm --prefix plotwise/plotwise start` instead. Configure MySQL and secrets before attempting to use the app. A web-service deployment does not create a MySQL database or activate n8n.
 
-## Project links
+The app initializes its schema before listening. Incorrect database configuration prevents startup. Free hosting may sleep after inactivity; allow time for a cold start. See the [technical guide](plotwise/plotwise/README.md) for database and workflow setup.
 
-- **Source:** [github.com/asadh-74/Plotwise](https://github.com/asadh-74/Plotwise)
-- **Detailed README:** [Architecture, setup, API, and workflow documentation](plotwise/plotwise/README.md)
-- **Automation definitions:** [n8n/workflows](plotwise/plotwise/n8n/workflows)
+## Verify the project
 
-## Delivery status and verification
+From `plotwise/plotwise`:
 
-Local rule-based replies are saved as **queued templates**, never as sent emails. Only an explicit delivery result updates contact timestamps. Existing historical records are not rewritten by this change.
+```bash
+npm test
+node --check public/app.js
+```
 
-Run `npm test` from `plotwise/plotwise`; CI checks delivery-state regressions and frontend syntax. MySQL and external integrations require separate end-to-end verification. See [Upwork portfolio copy](UPWORK.md) for a description that distinguishes implemented workflows from configured integrations.
+Four regression tests cover local queued templates, missing delivery status, explicit delivery confirmation and failed delivery. They use a stub database. GitHub Actions installs the locked dependencies and runs the tests and frontend syntax check. These checks do **not** replace a MySQL integration test or verification of live email/calendar delivery.
+
+## Suggested portfolio walkthrough
+
+1. Open a listing and inspect its details.
+2. Sign in as the demo agent and simulate a new enquiry.
+3. Inspect the rule-based score, activity history and **queued template**.
+4. Move the lead through the pipeline and demonstrate a viewing.
+5. Explore lease, rent and maintenance workspaces.
+6. Show automation logs and explain local versus connected mode.
+
+Use fresh fictional data and only demonstrate integrations that have been tested. Sample deal comparisons are not validated property valuations. Public demo accounts must never contain private customer or financial information.
+
+## Repository map
+
+| Path | Contents |
+|---|---|
+| `plotwise/plotwise/public/` | Browser interface |
+| `plotwise/plotwise/src/routes/` | REST endpoints |
+| `plotwise/plotwise/src/services/` | Business workflow logic |
+| `plotwise/plotwise/src/automation/` | n8n triggers and run tracking |
+| `plotwise/plotwise/db/schema.sql` | Application schema |
+| `plotwise/plotwise/n8n/workflows/` | Twelve example workflow definitions |
+| `plotwise/plotwise/test/` | Regression tests |
+| `.github/workflows/test.yml` | Automated repository checks |
+
+Built by **Asad Hussain** · [GitHub](https://github.com/asadh-74)
